@@ -5,38 +5,47 @@
  * @param height высота канвы
  * @constructor Конструктор принимает ширину и высоту канвы
  */
-function CanvasBitMask(width, height) {
-    var intWidth = Math.ceil(width / 32);
+class CanvasBitMask {
+    #width;
+    #height;
+    #intWidth;
+    #bits;
 
-    var bits = new Array(intWidth * height);
-    bits.fill(0 << 0);
+    constructor(width, height) {
+        this.#width = width;
+        this.#height = height;
+        this.#intWidth = Math.ceil(width / 32);
 
-    var holderIndex = function (x, y) {
-        if (x >= width || y >= height) throw "Out of canvas bounds";
-        return (y * intWidth) + Math.floor(x / 32);
+        this.#bits = new Array(this.#intWidth * height);
+        this.#bits.fill(0);
     }
 
-    var isSet = function (x, y) {
-        var index = holderIndex(x, y);
-        var holder = bits[index];
-        var bit = x % 32;
+    #holderIndex(x, y) {
+        if (x >= this.#width || y >= this.#height) throw new Error("Out of canvas bounds");
+        return (y * this.#intWidth) + Math.floor(x / 32);
+    }
+
+    #isSet(x, y) {
+        const index = this.#holderIndex(x, y);
+        const holder = this.#bits[index];
+        const bit = x % 32;
         return ((holder >>> (31 - bit)) & 0x1) > 0;
     }
 
-    this.isBitSet = function (x, y) {
-        return isSet(x, y);
+    isBitSet(x, y) {
+        return this.#isSet(x, y);
     }
 
-    this.compareAndSetBit = function (x, y) {
-        var alreadySet = isSet(x, y);
+    compareAndSetBit(x, y) {
+        const alreadySet = this.#isSet(x, y);
         if (alreadySet) {
             return false;
         }
 
-        var index = holderIndex(x, y);
-        var bit = x % 32;
-        var mask = 1 << (31 - bit);
-        bits[index] |= mask;
+        const index = this.#holderIndex(x, y);
+        const bit = x % 32;
+        const mask = 1 << (31 - bit);
+        this.#bits[index] |= mask;
 
         return true;
     }
@@ -45,45 +54,46 @@ function CanvasBitMask(width, height) {
 /*
  * Класс заливалки канвы для разных браузеров (заливка вручную)
  */
-function CanvasFloodFiller() {
+class CanvasFloodFiller {
     // Ширина и высота канвы
-    var _canvasWidth = -1;
-    var _canvasHeight = -1;
+    #canvasWidth = -1;
+    #canvasHeight = -1;
 
     // Заменяемый цвет
-    var _srcR = 0;
-    var _srcG = 0;
-    var _srcB = 0;
-    var _srcA = 0;
+    #srcR = 0;
+    #srcG = 0;
+    #srcB = 0;
+    #srcA = 0;
 
     // Цвет закраски
-    var _dstR = 0;
-    var _dstG = 0;
-    var _dstB = 0;
-    var _dstA = 0;
+    #dstR = 0;
+    #dstG = 0;
+    #dstB = 0;
+    #dstA = 0;
 
-    var tolerance = 32;
+    // Допуск на цветовое расстояние
+    #tolerance = 32;
 
     // Массив пикселей
-    var _data = null;
+    #data = null;
 
     // Посещённые пиксели на канве
-    var _visited = null;
+    #visited = null;
 
-    var dataOffsetByPixel = function (x, y) {
+    #dataOffsetByPixel(x, y) {
         // Точка: y * ширину_канвы * 4 + (x * 4)
-        return (y * _canvasWidth * 4) + (x * 4);
+        return (y * this.#canvasWidth * 4) + (x * 4);
     }
 
     /*
      * Получить точку из данных
      **/
-    var getDot = function (x, y) {
-        var startOffset = dataOffsetByPixel(x, y);
-        var dr = _data[startOffset];
-        var dg = _data[startOffset + 1];
-        var db = _data[startOffset + 2];
-        var da = _data[startOffset + 3];
+    #getDot(x, y) {
+        const startOffset = this.#dataOffsetByPixel(x, y);
+        const dr = this.#data[startOffset];
+        const dg = this.#data[startOffset + 1];
+        const db = this.#data[startOffset + 2];
+        const da = this.#data[startOffset + 3];
 
         return {r: dr, g: dg, b: db, a: da};
     }
@@ -94,48 +104,48 @@ function CanvasFloodFiller() {
      *
      * @returns {number} Цветовое расстояние
      */
-    var computeDistance = function (r, g, b, a) {
-        var rDiff = Math.abs(r - _srcR)
-        var gDiff = Math.abs(g - _srcG);
-        var bDiff = Math.abs(b - _srcB);
-        var aDiff = Math.abs(a - _srcA);
+    #computeDistance(r, g, b, a) {
+        const rDiff = Math.abs(r - this.#srcR);
+        const gDiff = Math.abs(g - this.#srcG);
+        const bDiff = Math.abs(b - this.#srcB);
+        const aDiff = Math.abs(a - this.#srcA);
         return Math.max(rDiff, gDiff, bDiff, aDiff);
     }
 
     /*
      * Пиксель по координатам x,y - готовый к заливке?
      **/
-    var isReplaceablePixel = function (x, y) {
+    #isReplaceablePixel(x, y) {
         // Не посещаем повторно
-        if (_visited.isBitSet(x, y)) {
+        if (this.#visited.isBitSet(x, y)) {
             return false;
         }
 
-        var startOffset = dataOffsetByPixel(x, y);
-        var dr = _data[startOffset];
-        var dg = _data[startOffset + 1];
-        var db = _data[startOffset + 2];
-        var da = _data[startOffset + 3];
+        const startOffset = this.#dataOffsetByPixel(x, y);
+        const dr = this.#data[startOffset];
+        const dg = this.#data[startOffset + 1];
+        const db = this.#data[startOffset + 2];
+        const da = this.#data[startOffset + 3];
 
-        if (dr == _srcR && dg == _srcG && db == _srcB && da == _srcA) {
+        if (dr === this.#srcR && dg === this.#srcG && db === this.#srcB && da === this.#srcA) {
             return true;
         }
 
-        if (tolerance > 0) {
-            var distance = computeDistance(dr, dg, db, da);
-            return distance <= tolerance;
+        if (this.#tolerance > 0) {
+            const distance = this.#computeDistance(dr, dg, db, da);
+            return distance <= this.#tolerance;
         }
 
         return false;
     }
 
-    var replacePixel = function (x, y) {
-        if (_visited.compareAndSetBit(x, y)) {
-            var offset = dataOffsetByPixel(x, y);
-            _data[offset] = _dstR;
-            _data[offset + 1] = _dstG;
-            _data[offset + 2] = _dstB;
-            _data[offset + 3] = _dstA;
+    #replacePixel(x, y) {
+        if (this.#visited.compareAndSetBit(x, y)) {
+            const offset = this.#dataOffsetByPixel(x, y);
+            this.#data[offset] = this.#dstR;
+            this.#data[offset + 1] = this.#dstG;
+            this.#data[offset + 2] = this.#dstB;
+            this.#data[offset + 3] = this.#dstA;
         }
     }
 
@@ -143,11 +153,11 @@ function CanvasFloodFiller() {
      * Закрашивает все пиксели влево от [x, y], возвращает координату x
      * последнего закрашенного пикселя. Пропускает сам пиксель [x, y].
      **/
-    var paintToLeftPixel = function (x, y) {
-        var currentX = x - 1;
+    #paintToLeftPixel(x, y) {
+        let currentX = x - 1;
 
-        while (currentX >= 0 && isReplaceablePixel(currentX, y)) {
-            replacePixel(currentX, y);
+        while (currentX >= 0 && this.#isReplaceablePixel(currentX, y)) {
+            this.#replacePixel(currentX, y);
             currentX--;
         }
 
@@ -162,11 +172,11 @@ function CanvasFloodFiller() {
      *
      * isReplaceablePixel(x, y) обязан возвращать true!
      **/
-    var paintToRightPixel = function (x, y) {
-        var currentX = x;
+    #paintToRightPixel(x, y) {
+        let currentX = x;
 
-        while (currentX < _canvasWidth && isReplaceablePixel(currentX, y)) {
-            replacePixel(currentX, y);
+        while (currentX < this.#canvasWidth && this.#isReplaceablePixel(currentX, y)) {
+            this.#replacePixel(currentX, y);
             currentX++;
         }
 
@@ -181,9 +191,9 @@ function CanvasFloodFiller() {
      *
      * @returns Описание линии в виде объекта с координатами: x1, x2, y.
      */
-    var makeLine = function (x, y) {
-        var left = paintToLeftPixel(x, y)
-        var right = paintToRightPixel(x, y)
+    #makeLine(x, y) {
+        const left = this.#paintToLeftPixel(x, y);
+        const right = this.#paintToRightPixel(x, y);
         return {x1: left, x2: right, y: y};
     }
 
@@ -194,9 +204,9 @@ function CanvasFloodFiller() {
      * @returns Описание линии в виде объекта с координатами: x1, x2, y,
      *          либо null
      */
-    var tryToMakeLine = function (x, y) {
-        if (isReplaceablePixel(x, y)) {
-            return makeLine(x, y);
+    #tryToMakeLine(x, y) {
+        if (this.#isReplaceablePixel(x, y)) {
+            return this.#makeLine(x, y);
         }
 
         return null;
@@ -205,21 +215,21 @@ function CanvasFloodFiller() {
     /*
      * Эффективная (строчная) заливка по координатам [x, y]
      **/
-    var effectiveFill = function (cx, cy) {
-        var lineQueue = new Array();
+    #effectiveFill(cx, cy) {
+        const lineQueue = [];
 
         // Формируем первую залитую строку в стороны от точки x, y
-        lineQueue.push(makeLine(cx, cy));
+        lineQueue.push(this.#makeLine(cx, cy));
 
         while (lineQueue.length > 0) {
-            var line = lineQueue.pop();
+            const line = lineQueue.pop();
 
             // line уже закрашена, и левее-правее искать смысла нет,
             // а вот выше-ниже лежат другие строки.
             // Есть строка выше?
             if (line.y > 0) {
-                for (var x = line.x1; x <= line.x2; x++) {
-                    var newLine = tryToMakeLine(x, line.y - 1);
+                for (let x = line.x1; x <= line.x2; x++) {
+                    const newLine = this.#tryToMakeLine(x, line.y - 1);
                     if (newLine !== null) {
                         lineQueue.push(newLine);
                         x = newLine.x2;
@@ -228,9 +238,9 @@ function CanvasFloodFiller() {
             }
 
             // Теперь это же, но на строку вниз
-            if (line.y < (_canvasHeight - 1)) {
-                for (x = line.x1; x <= line.x2; x++) {
-                    newLine = tryToMakeLine(x, line.y + 1);
+            if (line.y < (this.#canvasHeight - 1)) {
+                for (let x = line.x1; x <= line.x2; x++) {
+                    const newLine = this.#tryToMakeLine(x, line.y + 1);
                     if (newLine !== null) {
                         lineQueue.push(newLine);
                         x = newLine.x2;
@@ -248,9 +258,9 @@ function CanvasFloodFiller() {
      * int x, y - координаты точки заливки
      * color - цвет заливки
      */
-    this.floodFill = function (canvasContext, x, y, color) {
-        _canvasWidth = canvasContext.canvas.width;
-        _canvasHeight = canvasContext.canvas.height;
+    floodFill(canvasContext, x, y, color) {
+        this.#canvasWidth = canvasContext.canvas.width;
+        this.#canvasHeight = canvasContext.canvas.height;
 
         // Координаты приводятся к целым пикселям: дробный индекс в
         // _data даёт undefined, из-за чего старый строчный алгоритм
@@ -259,30 +269,32 @@ function CanvasFloodFiller() {
         x = Math.floor(x);
         y = Math.floor(y);
 
-        if (x < 0 || x >= _canvasWidth || y < 0 || y >= _canvasHeight)
+        if (x < 0 || x >= this.#canvasWidth || y < 0 || y >= this.#canvasHeight) {
             return;
+        }
 
-        _dstR = color.r;
-        _dstG = color.g;
-        _dstB = color.b;
-        _dstA = color.a;
+        this.#dstR = color.r;
+        this.#dstG = color.g;
+        this.#dstB = color.b;
+        this.#dstA = color.a;
 
-        var imageData = canvasContext.getImageData(0, 0, _canvasWidth, _canvasHeight);
-        var pixels = imageData.data;
-        _data = pixels;
-        _visited = new CanvasBitMask(_canvasWidth, _canvasHeight);
+        const imageData = canvasContext.getImageData(0, 0, this.#canvasWidth, this.#canvasHeight);
+        const pixels = imageData.data;
+        this.#data = pixels;
+        this.#visited = new CanvasBitMask(this.#canvasWidth, this.#canvasHeight);
 
-        var toReplace = getDot(x, y);
-        _srcR = toReplace.r;
-        _srcG = toReplace.g;
-        _srcB = toReplace.b;
-        _srcA = toReplace.a;
+        const toReplace = this.#getDot(x, y);
+        this.#srcR = toReplace.r;
+        this.#srcG = toReplace.g;
+        this.#srcB = toReplace.b;
+        this.#srcA = toReplace.a;
 
-        // Всё зависнет, если цвета совпадают
-        if (_srcR == _dstR && _srcG == _dstG && _srcB == _dstB && _srcA == _dstA)
+        // Всё зависнет, если цвета совпадают и tolerance == 0
+        if (this.#srcR === this.#dstR && this.#srcG === this.#dstG && this.#srcB === this.#dstB && this.#srcA === this.#dstA) {
             return;
+        }
 
-        effectiveFill(x, y);
+        this.#effectiveFill(x, y);
 
         canvasContext.putImageData(imageData, 0, 0);
     }
