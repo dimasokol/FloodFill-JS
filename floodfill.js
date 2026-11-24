@@ -299,3 +299,21 @@ class CanvasFloodFiller {
         canvasContext.putImageData(imageData, 0, 0);
     }
 }
+
+/*
+ * Современный контракт: заливка доступна прямо у 2D-контекста канвы.
+ * Метод добавляем только если его ещё нет (например, когда его добавил
+ * браузер или другая библиотека), чтобы ничего не перезаписывать.
+ */
+if (typeof CanvasRenderingContext2D !== "undefined" && !CanvasRenderingContext2D.prototype.floodFill) {
+    /**
+     * Выполняет заливку области, начиная с точки (x, y), цветом color.
+     *
+     * @param x {number} Координата x точки заливки
+     * @param y {number} Координата y точки заливки
+     * @param color {{r: number, g: number, b: number, a: number}} Цвет заливки
+     */
+    CanvasRenderingContext2D.prototype.floodFill = function (x, y, color) {
+        new CanvasFloodFiller().floodFill(this, x, y, color);
+    };
+}
