@@ -71,14 +71,20 @@ class CanvasFloodFiller {
     #dstB = 0;
     #dstA = 0;
 
-    // Допуск на цветовое расстояние
-    #tolerance = 32;
-
     // Массив пикселей
     #data = null;
 
     // Посещённые пиксели на канве
     #visited = null;
+
+    /**
+     * @param {number} [tolerance=32] Необязательный допуск на цветовое
+     *        расстояние при заливке. Это же значение доступно и как
+     *        настраиваемое свойство: filler.tolerance.
+     */
+    constructor(tolerance = 32) {
+        this.tolerance = tolerance;
+    }
 
     #dataOffsetByPixel(x, y) {
         // Точка: y * ширину_канвы * 4 + (x * 4)
@@ -131,9 +137,9 @@ class CanvasFloodFiller {
             return true;
         }
 
-        if (this.#tolerance > 0) {
+        if (this.tolerance > 0) {
             const distance = this.#computeDistance(dr, dg, db, da);
-            return distance <= this.#tolerance;
+            return distance <= this.tolerance;
         }
 
         return false;
@@ -312,8 +318,10 @@ if (typeof CanvasRenderingContext2D !== "undefined" && !CanvasRenderingContext2D
      * @param x {number} Координата x точки заливки
      * @param y {number} Координата y точки заливки
      * @param color {{r: number, g: number, b: number, a: number}} Цвет заливки
+     * @param tolerance {number} [32] Необязательный допуск на цветовое
+     *        расстояние, передаётся в CanvasFloodFiller.
      */
-    CanvasRenderingContext2D.prototype.floodFill = function (x, y, color) {
-        new CanvasFloodFiller().floodFill(this, x, y, color);
+    CanvasRenderingContext2D.prototype.floodFill = function (x, y, color, tolerance) {
+        new CanvasFloodFiller(tolerance).floodFill(this, x, y, color);
     };
 }

@@ -61,6 +61,33 @@
             margin: 10px 0 12px;
             flex: none;
         }
+        /* Регулятор допуска заливки: 0 — только точное совпадение цвета,
+           больше — заливаются и соседние похожие оттенки */
+        #ff-tolerance {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font: inherit;
+            font-size: 15px;
+            line-height: 1.2;
+            padding: 8px 12px;
+            border: 1px solid #c9c9c9;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #1a1a1a;
+            flex: none;
+        }
+        #ff-tolerance input[type="range"] {
+            width: 120px;
+            margin: 0;
+            accent-color: var(--ff-accent);
+        }
+        #ff-tolerance output {
+            min-width: 2.5ch;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+        }
         #ff-demo .ff-btn {
             font: inherit;
             font-size: 15px;
@@ -116,6 +143,11 @@
     <div id="ff-toolbar">
         <button type="button" id="ff-tool-draw" class="ff-btn">Рисунок</button>
         <button type="button" id="ff-tool-fill" class="ff-btn">Заливка</button>
+        <label id="ff-tolerance" class="ff-tolerance" title="Допуск на цветовое расстояние при заливке: 0 — заливается только точно совпадающий цвет">
+            <span>Допуск</span>
+            <input type="range" id="ff-tolerance-range" min="0" max="255" step="1" value="32">
+            <output id="ff-tolerance-value" for="ff-tolerance-range">32</output>
+        </label>
     </div>
     <div id="ff-palette"></div>
 </div>
@@ -140,6 +172,9 @@
         // Цвета: передний план (карандаш) и задний (заливка)
         var _foreground = {r: 0, g: 0, b: 0, a: 255};
         var _background = {r: 0, g: 0, b: 0, a: 255};
+
+        // Допуск на цветовое расстояние для заливки
+        var _tolerance = 32;
 
         // Пустышка для неиспользуемых слотов таблиц инструментов (слот 0 = NONE)
         var noop = function () { };
@@ -178,8 +213,10 @@
                 _canvasContext.stroke();
             },
             11: function (evt) {
-                // Заливка: срабатывает по клику
-                var cff = new CanvasFloodFiller();
+                // Заливка: срабатывает по клику. Допуск — необязательный
+                // параметр конструктора; его же можно поменять позже как
+                // свойство: cff.tolerance = n
+                var cff = new CanvasFloodFiller(_tolerance);
                 cff.floodFill(_canvasContext, evt.localX, evt.localY, _background);
             }
         };
@@ -421,6 +458,14 @@
         }
 
         /*
+         * void setTolerance(int tolerance)
+         * Задать допуск на цветовое расстояние для заливки.
+         * */
+        this.setTolerance = function (tolerance) {
+            _tolerance = tolerance;
+        }
+
+        /*
          * void setForegroundColor(int r, int g, int b, float a)
          * Установить цвет карандаша (RGBA).
          * */
@@ -466,6 +511,7 @@
         // Текущее состояние демки
         var currentTool = 2; // TrainCanvas.tools.PENCIL
         var currentColor = {r: 0, g: 0, b: 0, a: 255};
+        var currentTolerance = 32; // допуск заливки (по умолчанию, как в библиотеке)
         var canv = null;
         var currentW = 0;
         var currentH = 0;
@@ -502,6 +548,7 @@
             wrap.style.height = size.h + 'px';
             applyColor();
             canv.selectTool(currentTool, null);
+            canv.setTolerance(currentTolerance);
         }
 
         function applyColor() {
@@ -577,6 +624,19 @@
             currentTool = canv.tools.FILL;
             canv.selectTool(currentTool, null);
             activateTool(btnFill);
+        });
+
+        /* ---------- допуск заливки ---------- */
+
+        var toleranceRange = document.getElementById('ff-tolerance-range');
+        var toleranceValue = document.getElementById('ff-tolerance-value');
+
+        toleranceRange.addEventListener('input', function () {
+            currentTolerance = parseInt(toleranceRange.value, 10);
+            toleranceValue.textContent = String(currentTolerance);
+            if (canv) {
+                canv.setTolerance(currentTolerance);
+            }
         });
 
         /* ---------- палитра ---------- */
