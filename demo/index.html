@@ -157,126 +157,126 @@
 
     /* TrainPainter.js — урезанная копия: только карандаш (PENCIL) и заливка (FILL) */
 
-    function TrainCanvas() {
+    class TrainCanvas {
         // private:
-        var _mainImage = null;      // HTMLCanvas: главное изображение
-        var _editGlass = null;      // DOMElement: "стекло" для событий мыши/тача
+        _mainImage = null;      // HTMLCanvas: главное изображение
+        _editGlass = null;      // DOMElement: "стекло" для событий мыши/тача
 
-        var _last = {x: -1, y: -1};         // "Прошлые" координаты при рисовании
-        var _mouseDown = {x: -1, y: -1};    // Координаты нажатия кнопки
-        var _mousePressed = false;          // Кнопка/палец нажаты?
+        _last = {x: -1, y: -1};         // "Прошлые" координаты при рисовании
+        _mouseDown = {x: -1, y: -1};    // Координаты нажатия кнопки
+        _mousePressed = false;          // Кнопка/палец нажаты?
 
         // 2D-контекст основной канвы
-        var _canvasContext = null;
+        _canvasContext = null;
 
         // Цвета: передний план (карандаш) и задний (заливка)
-        var _foreground = {r: 0, g: 0, b: 0, a: 255};
-        var _background = {r: 0, g: 0, b: 0, a: 255};
+        _foreground = {r: 0, g: 0, b: 0, a: 255};
+        _background = {r: 0, g: 0, b: 0, a: 255};
 
         // Допуск на цветовое расстояние для заливки
-        var _tolerance = 32;
+        _tolerance = 32;
 
         // Пустышка для неиспользуемых слотов таблиц инструментов (слот 0 = NONE)
-        var noop = function () { };
+        noop = () => { };
 
         // public:
-        this.tools = {
+        tools = {
             NONE: 0,
             PENCIL: 2,      // Карандаш
             FILL: 11        // Заливка
         };
 
-        var _currentTool = this.tools.NONE;
+        _currentTool = this.tools.NONE;
 
         // Включение инструмента (правит курсор над "стеклом")
-        var _toolSwitchedOn = {
-            0: noop,
-            2: function () { _editGlass.style.cursor = "crosshair"; },
-            11: function () { _editGlass.style.cursor = "default"; }
+        _toolSwitchedOn = {
+            0: this.noop,
+            2: () => { this._editGlass.style.cursor = "crosshair"; },
+            11: () => { this._editGlass.style.cursor = "default"; }
         };
 
         // Выключение инструмента (карандашу и заливке нечего чинить)
-        var _toolSwitchedOff = {
-            0: noop,
-            2: noop,
-            11: noop
+        _toolSwitchedOff = {
+            0: this.noop,
+            2: this.noop,
+            11: this.noop
         };
 
         // Действие по нажатию кнопки/пальца
-        var _toolMouseDown = {
-            0: noop,
-            2: function (evt) {
+        _toolMouseDown = {
+            0: this.noop,
+            2: (evt) => {
                 // Карандаш: сразу рисуем точку
-                _canvasContext.beginPath();
-                _canvasContext.moveTo(evt.localX, evt.localY);
-                _canvasContext.lineTo(evt.localX, evt.localY);
-                _canvasContext.stroke();
+                this._canvasContext.beginPath();
+                this._canvasContext.moveTo(evt.localX, evt.localY);
+                this._canvasContext.lineTo(evt.localX, evt.localY);
+                this._canvasContext.stroke();
             },
-            11: function (evt) {
+            11: (evt) => {
                 // Заливка: срабатывает по клику. Допуск — необязательный
                 // параметр конструктора; его же можно поменять позже как
                 // свойство: cff.tolerance = n
-                var cff = new CanvasFloodFiller(_tolerance);
-                cff.floodFill(_canvasContext, evt.localX, evt.localY, _background);
+                const cff = new CanvasFloodFiller(this._tolerance);
+                cff.floodFill(this._canvasContext, evt.localX, evt.localY, this._background);
             }
         };
 
         // Действие по отпусканию кнопки/пальца
-        var _toolMouseUp = {
-            0: noop,
-            2: function () {
+        _toolMouseUp = {
+            0: this.noop,
+            2: () => {
                 // Карандаш: завершаем штрих
-                _canvasContext.stroke();
+                this._canvasContext.stroke();
             },
-            11: noop
+            11: this.noop
         };
 
         // Действие при движении мыши/пальца
-        var _toolMouseMove = {
-            0: noop,
-            2: function (evt) {
+        _toolMouseMove = {
+            0: this.noop,
+            2: (evt) => {
                 // Карандаш: ведём линию за курсором
-                if (_mousePressed) {
-                    _canvasContext.beginPath();
-                    _canvasContext.moveTo(_last.x, _last.y);
-                    _canvasContext.lineTo(evt.localX, evt.localY);
-                    _canvasContext.stroke();
+                if (this._mousePressed) {
+                    this._canvasContext.beginPath();
+                    this._canvasContext.moveTo(this._last.x, this._last.y);
+                    this._canvasContext.lineTo(evt.localX, evt.localY);
+                    this._canvasContext.stroke();
                 }
             },
-            11: noop
+            11: this.noop
         };
 
         /*
          * bool create(DOMElement pElement, int w, int h)
          * Создаёт рисовалку внутри указанного DOM-элемента.
          * */
-        this.create = function (pElement, w, h) {
+        create(pElement, w, h) {
             // Канва и "стекло" событий. Overlay-канва не нужна: её использовали
             // только инструменты с предпросмотром (линия, фигуры), которых здесь нет.
-            _mainImage = document.createElement("canvas");
-            _editGlass = document.createElement("div");
+            this._mainImage = document.createElement("canvas");
+            this._editGlass = document.createElement("div");
 
-            _mainImage.style.width = _editGlass.style.width = w + "px";
-            _mainImage.style.height = _editGlass.style.height = h + "px";
+            this._mainImage.style.width = this._editGlass.style.width = w + "px";
+            this._mainImage.style.height = this._editGlass.style.height = h + "px";
 
-            _mainImage.width = w;
-            _mainImage.height = h;
+            this._mainImage.width = w;
+            this._mainImage.height = h;
 
             // Абсолютное позиционирование внутри контейнера
-            _mainImage.style.position = _editGlass.style.position = "absolute";
+            this._mainImage.style.position = this._editGlass.style.position = "absolute";
 
             // Отключаем на "стекле" жесты браузера (прокрутку и масштабирование
             // двойным тапом), чтобы касания целиком уходили в рисование
-            _editGlass.style.touchAction = 'none';
+            this._editGlass.style.touchAction = 'none';
 
-            pElement.appendChild(_mainImage);
-            pElement.appendChild(_editGlass);
+            pElement.appendChild(this._mainImage);
+            pElement.appendChild(this._editGlass);
 
-            _canvasContext = _mainImage.getContext("2d");
+            this._canvasContext = this._mainImage.getContext("2d");
 
-            _canvasContext.fillStyle = "rgba(0, 0, 255, 1.0)";
-            _canvasContext.strokeStyle = "rgba(255, 0, 0, 1.0)";
-            _canvasContext.lineWidth = 2;
+            this._canvasContext.fillStyle = "rgba(0, 0, 255, 1.0)";
+            this._canvasContext.strokeStyle = "rgba(255, 0, 0, 1.0)";
+            this._canvasContext.lineWidth = 2;
 
             /*
              * void digestEvent(Event myEvent, bool doNotStop)
@@ -284,14 +284,14 @@
              * Округление до целых пикселей защищает заливку от бесконечного
              * цикла при дробных координатах на тач-устройствах.
              **/
-            var digestEvent = function (myEvent, doNotStop) {
+            const digestEvent = (myEvent, doNotStop) => {
                 if (doNotStop == null || doNotStop == false) {
                     myEvent.preventDefault();
                     myEvent.stopPropagation();
                 }
 
-                var px = 0;
-                var py = 0;
+                let px = 0;
+                let py = 0;
 
                 if (myEvent.changedTouches && myEvent.changedTouches.length > 0) {
                     // На touchend массив touches уже пуст, поэтому первым берём changedTouches
@@ -305,60 +305,60 @@
                     py = myEvent.pageY;
                 }
 
-                var canvX = _editGlass._calcX;
-                var canvY = _editGlass._calcY;
+                const canvX = this._editGlass._calcX;
+                const canvY = this._editGlass._calcY;
 
                 myEvent.localX = Math.floor(px - canvX);
                 myEvent.localY = Math.floor(py - canvY);
             }
 
             // Нажатие кнопки (или касание)
-            var mousedown = function (evt) {
+            const mousedown = (evt) => {
                 digestEvent(evt);
 
-                if (_currentTool >= 0) {
-                    _toolMouseDown[_currentTool](evt);
+                if (this._currentTool >= 0) {
+                    this._toolMouseDown[this._currentTool](evt);
                 }
 
-                _mouseDown.x = evt.localX;
-                _mouseDown.y = evt.localY;
+                this._mouseDown.x = evt.localX;
+                this._mouseDown.y = evt.localY;
 
                 // Начальная точка штриха: иначе карандаш на первом движении
                 // дотянул бы линию из конца предыдущего штриха
-                _last.x = evt.localX;
-                _last.y = evt.localY;
+                this._last.x = evt.localX;
+                this._last.y = evt.localY;
 
-                _mousePressed = true;
+                this._mousePressed = true;
             };
 
             // Перемещение мыши
-            var mousemove = function (evt) {
+            const mousemove = (evt) => {
                 // Полностью перевариваем событие, только пока рисуем;
                 // иначе оставляем странице прокрутку
-                digestEvent(evt, (_mousePressed == false));
+                digestEvent(evt, (this._mousePressed == false));
 
-                if (_currentTool >= 0) {
-                    _toolMouseMove[_currentTool](evt);
+                if (this._currentTool >= 0) {
+                    this._toolMouseMove[this._currentTool](evt);
                 }
 
-                _last.x = evt.localX;
-                _last.y = evt.localY;
+                this._last.x = evt.localX;
+                this._last.y = evt.localY;
             };
 
             // Отпускание кнопки
-            var mouseup = function (evt) {
+            const mouseup = (evt) => {
                 // _mousePressed != false нужна потому, что mouseup ловим по документу
-                if (_currentTool >= 0 && _mousePressed != false) {
+                if (this._currentTool >= 0 && this._mousePressed != false) {
                     digestEvent(evt);
-                    _toolMouseUp[_currentTool](evt);
+                    this._toolMouseUp[this._currentTool](evt);
                 }
 
-                _mouseDown.x = _mouseDown.y = -1;
-                _mousePressed = false;
+                this._mouseDown.x = this._mouseDown.y = -1;
+                this._mousePressed = false;
             }
 
             // Касание экрана пальцем. Работает как mousedown.
-            var touchstart = function (evt) {
+            const touchstart = (evt) => {
                 // Игнорируем мультитач: рисуем только первым пальцем
                 if (evt.touches.length > 1) {
                     return;
@@ -366,54 +366,54 @@
 
                 digestEvent(evt);
 
-                if (_currentTool >= 0) {
-                    _toolMouseDown[_currentTool](evt);
+                if (this._currentTool >= 0) {
+                    this._toolMouseDown[this._currentTool](evt);
                 }
 
-                _mouseDown.x = evt.localX;
-                _mouseDown.y = evt.localY;
+                this._mouseDown.x = evt.localX;
+                this._mouseDown.y = evt.localY;
 
-                _last.x = evt.localX;
-                _last.y = evt.localY;
+                this._last.x = evt.localX;
+                this._last.y = evt.localY;
 
-                _mousePressed = true;
+                this._mousePressed = true;
             };
 
             // Движение пальца. Работает как mousemove.
-            var touchmove = function (evt) {
-                digestEvent(evt, (_mousePressed == false));
+            const touchmove = (evt) => {
+                digestEvent(evt, (this._mousePressed == false));
 
-                if (_currentTool >= 0) {
-                    _toolMouseMove[_currentTool](evt);
+                if (this._currentTool >= 0) {
+                    this._toolMouseMove[this._currentTool](evt);
                 }
 
-                _last.x = evt.localX;
-                _last.y = evt.localY;
+                this._last.x = evt.localX;
+                this._last.y = evt.localY;
             };
 
             // Палец ушёл с экрана. Работает как mouseup.
-            var touchend = function (evt) {
-                if (_currentTool >= 0 && _mousePressed != false) {
+            const touchend = (evt) => {
+                if (this._currentTool >= 0 && this._mousePressed != false) {
                     digestEvent(evt);
-                    _toolMouseUp[_currentTool](evt);
+                    this._toolMouseUp[this._currentTool](evt);
                 }
 
-                _mouseDown.x = _mouseDown.y = -1;
-                _mousePressed = false;
+                this._mouseDown.x = this._mouseDown.y = -1;
+                this._mousePressed = false;
             }
 
             // Жест прерван системой — завершаем штрих как при обычном отрыве пальца
-            var touchcancel = touchend;
+            const touchcancel = touchend;
 
             // Пересчёт позиции канвы на странице (для перевода координат событий)
-            var recalcPosition = function () {
-                _editGlass._calcX = _editGlass.offsetLeft;
-                _editGlass._calcY = _editGlass.offsetTop;
+            const recalcPosition = () => {
+                this._editGlass._calcX = this._editGlass.offsetLeft;
+                this._editGlass._calcY = this._editGlass.offsetTop;
 
-                var obj = _editGlass.offsetParent;
+                let obj = this._editGlass.offsetParent;
                 while (obj != null) {
-                    _editGlass._calcX += obj.offsetLeft;
-                    _editGlass._calcY += obj.offsetTop;
+                    this._editGlass._calcX += obj.offsetLeft;
+                    this._editGlass._calcY += obj.offsetTop;
                     obj = obj.offsetParent;
                 }
             }
@@ -424,8 +424,8 @@
             // preventDefault в digestEvent не сможет отменять прокрутку.
             // Движение и отрыв продублированы на окно: рисование не обрывается,
             // когда мышь/палец выходит за границы канвы.
-            _editGlass.addEventListener('mousedown', mousedown);
-            _editGlass.addEventListener('touchstart', touchstart, {passive: false});
+            this._editGlass.addEventListener('mousedown', mousedown);
+            this._editGlass.addEventListener('touchstart', touchstart, {passive: false});
             window.addEventListener('mousemove', mousemove);
             window.addEventListener('touchmove', touchmove, {passive: false});
             window.addEventListener('mouseup', mouseup);
@@ -441,54 +441,54 @@
          * void selectTool(int tool, Object parameters)
          * Выбирает текущий инструмент (PENCIL или FILL).
          * */
-        this.selectTool = function (tool, parameters) {
+        selectTool(tool, parameters) {
             // Проверка диапазона
             if (tool < 0 || tool > 11)
                 return;
 
             // Инструмент на лету не меняется
-            _mousePressed = false;
+            this._mousePressed = false;
 
-            if (_currentTool >= 0)
-                _toolSwitchedOff[_currentTool]();
+            if (this._currentTool >= 0)
+                this._toolSwitchedOff[this._currentTool]();
 
-            _toolSwitchedOn[tool](parameters);
+            this._toolSwitchedOn[tool](parameters);
 
-            _currentTool = tool;
+            this._currentTool = tool;
         }
 
         /*
          * void setTolerance(int tolerance)
          * Задать допуск на цветовое расстояние для заливки.
          * */
-        this.setTolerance = function (tolerance) {
-            _tolerance = tolerance;
+        setTolerance(tolerance) {
+            this._tolerance = tolerance;
         }
 
         /*
          * void setForegroundColor(int r, int g, int b, float a)
          * Установить цвет карандаша (RGBA).
          * */
-        this.setForegroundColor = function (r, g, b, a) {
-            _foreground.r = r;
-            _foreground.g = g;
-            _foreground.b = b;
-            _foreground.a = a;
+        setForegroundColor(r, g, b, a) {
+            this._foreground.r = r;
+            this._foreground.g = g;
+            this._foreground.b = b;
+            this._foreground.a = a;
 
-            _canvasContext.strokeStyle = "rgba(" + r + "," + g + "," + b + "," + a + ")";
+            this._canvasContext.strokeStyle = "rgba(" + r + "," + g + "," + b + "," + a + ")";
         }
 
         /*
          * void setBackgroundColor(int r, int g, int b, float a)
          * Установить цвет заливки (RGBA).
          * */
-        this.setBackgroundColor = function (r, g, b, a) {
-            _background.r = r;
-            _background.g = g;
-            _background.b = b;
-            _background.a = a;
+        setBackgroundColor(r, g, b, a) {
+            this._background.r = r;
+            this._background.g = g;
+            this._background.b = b;
+            this._background.a = a;
 
-            _canvasContext.fillStyle = "rgba(" + r + "," + g + "," + b + "," + a + ")";
+            this._canvasContext.fillStyle = "rgba(" + r + "," + g + "," + b + "," + a + ")";
         }
     }
 
@@ -496,31 +496,31 @@
     /* ============================================================
      * Клей для демки: размеры, инструменты, палитра
      * ============================================================ */
-    (function () {
+    (() => {
         'use strict';
 
-        var wrap = document.getElementById('ff-canvas-wrap');
+        const wrap = document.getElementById('ff-canvas-wrap');
         if (!wrap) {
             return;
         }
 
-        var btnDraw = document.getElementById('ff-tool-draw');
-        var btnFill = document.getElementById('ff-tool-fill');
-        var paletteEl = document.getElementById('ff-palette');
+        const btnDraw = document.getElementById('ff-tool-draw');
+        const btnFill = document.getElementById('ff-tool-fill');
+        const paletteEl = document.getElementById('ff-palette');
 
         // Текущее состояние демки
-        var currentTool = 2; // TrainCanvas.tools.PENCIL
-        var currentColor = {r: 0, g: 0, b: 0, a: 255};
-        var currentTolerance = 32; // допуск заливки (по умолчанию, как в библиотеке)
-        var canv = null;
-        var currentW = 0;
-        var currentH = 0;
+        let currentTool = 2; // TrainCanvas.tools.PENCIL
+        let currentColor = {r: 0, g: 0, b: 0, a: 255};
+        let currentTolerance = 32; // допуск заливки (по умолчанию, как в библиотеке)
+        let canv = null;
+        let currentW = 0;
+        let currentH = 0;
 
         /* ---------- размеры и создание холста ---------- */
 
-        function canvasSize() {
-            var w = wrap.clientWidth;
-            var h = wrap.clientHeight;
+        const canvasSize = () => {
+            let w = wrap.clientWidth;
+            let h = wrap.clientHeight;
             if (w === 0) {
                 w = wrap.parentNode ? wrap.parentNode.clientWidth : 640;
             }
@@ -538,9 +538,9 @@
             return {w: w, h: h};
         }
 
-        function createCanvas() {
+        const createCanvas = () => {
             wrap.innerHTML = '';
-            var size = canvasSize();
+            const size = canvasSize();
             currentW = size.w;
             currentH = size.h;
             canv = new TrainCanvas();
@@ -551,7 +551,7 @@
             canv.setTolerance(currentTolerance);
         }
 
-        function applyColor() {
+        const applyColor = () => {
             canv.setForegroundColor(currentColor.r, currentColor.g, currentColor.b, currentColor.a);
             canv.setBackgroundColor(currentColor.r, currentColor.g, currentColor.b, currentColor.a);
         }
@@ -562,18 +562,18 @@
          * перед пересозданием кадр сохраняется (toDataURL) и после —
          * растягивается на новый холст.
          */
-        var savedFrame = null;
-        var resizeTimer = null;
+        let savedFrame = null;
+        let resizeTimer = null;
 
-        function onResize() {
+        const onResize = () => {
             clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(function () {
-                var size = canvasSize();
+            resizeTimer = setTimeout(() => {
+                const size = canvasSize();
                 // Размеры холста задаёт flex-раскладка, поэтому следим за обеими осями
                 if (Math.abs(size.w - currentW) < 2 && Math.abs(size.h - currentH) < 2) {
                     return; // размеры не изменились — ничего не делаем
                 }
-                var main = wrap.children[0];
+                const main = wrap.children[0];
                 if (main && main.toDataURL) {
                     try {
                         savedFrame = main.toDataURL();
@@ -583,10 +583,10 @@
                 }
                 createCanvas();
                 if (savedFrame) {
-                    var img = new Image();
-                    img.onload = function () {
-                        var ctx = wrap.children[0].getContext('2d');
-                        var s2 = canvasSize();
+                    const img = new Image();
+                    img.onload = () => {
+                        const ctx = wrap.children[0].getContext('2d');
+                        const s2 = canvasSize();
                         ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, s2.w, s2.h);
                     };
                     img.src = savedFrame;
@@ -599,28 +599,28 @@
         // перестроить блок без изменения размера окна. Защита от цикла —
         // в onResize: пересоздание меняет только высоту контейнера.
         if (typeof ResizeObserver !== 'undefined') {
-            new ResizeObserver(function () {
+            new ResizeObserver(() => {
                 onResize();
             }).observe(wrap);
         }
 
         /* ---------- инструменты ---------- */
 
-        function activateTool(btn) {
-            var btns = document.querySelectorAll('#ff-demo .ff-btn');
-            for (var i = 0; i < btns.length; i++) {
+        const activateTool = (btn) => {
+            const btns = document.querySelectorAll('#ff-demo .ff-btn');
+            for (let i = 0; i < btns.length; i++) {
                 btns[i].classList.remove('ff-btn-active');
             }
             btn.classList.add('ff-btn-active');
         }
 
-        btnDraw.addEventListener('click', function () {
+        btnDraw.addEventListener('click', () => {
             currentTool = canv.tools.PENCIL;
             canv.selectTool(currentTool, null);
             activateTool(btnDraw);
         });
 
-        btnFill.addEventListener('click', function () {
+        btnFill.addEventListener('click', () => {
             currentTool = canv.tools.FILL;
             canv.selectTool(currentTool, null);
             activateTool(btnFill);
@@ -628,10 +628,10 @@
 
         /* ---------- допуск заливки ---------- */
 
-        var toleranceRange = document.getElementById('ff-tolerance-range');
-        var toleranceValue = document.getElementById('ff-tolerance-value');
+        const toleranceRange = document.getElementById('ff-tolerance-range');
+        const toleranceValue = document.getElementById('ff-tolerance-value');
 
-        toleranceRange.addEventListener('input', function () {
+        toleranceRange.addEventListener('input', () => {
             currentTolerance = parseInt(toleranceRange.value, 10);
             toleranceValue.textContent = String(currentTolerance);
             if (canv) {
@@ -641,7 +641,7 @@
 
         /* ---------- палитра ---------- */
 
-        var palette = [
+        const palette = [
             ['#000000', 'Чёрный'],
             ['#ffffff', 'Белый'],
             ['#808080', 'Серый'],
@@ -656,25 +656,25 @@
             ['#795548', 'Коричневый']
         ];
 
-        function hexToRgba(hex) {
-            var n = parseInt(hex.slice(1), 16);
+        const hexToRgba = (hex) => {
+            const n = parseInt(hex.slice(1), 16);
             return {r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a: 255};
         }
 
-        palette.forEach(function (item) {
-            var swatch = document.createElement('span');
+        palette.forEach((item) => {
+            const swatch = document.createElement('span');
             swatch.className = 'ff-swatch';
             swatch.title = item[1];
             swatch.style.background = item[0];
 
-            swatch.addEventListener('click', function () {
+            swatch.addEventListener('click', () => {
                 // Выбор цвета из палитры ставит оба цвета сразу —
                 // и "перо" (обводка), и заливку
                 currentColor = hexToRgba(item[0]);
                 applyColor();
 
-                var sw = paletteEl.getElementsByClassName('ff-swatch');
-                for (var i = 0; i < sw.length; i++) {
+                const sw = paletteEl.getElementsByClassName('ff-swatch');
+                for (let i = 0; i < sw.length; i++) {
                     sw[i].classList.remove('ff-swatch-active');
                 }
                 swatch.classList.add('ff-swatch-active');
