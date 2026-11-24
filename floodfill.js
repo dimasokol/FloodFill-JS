@@ -17,7 +17,7 @@ class CanvasBitMask {
         this.#intWidth = Math.ceil(width / 32);
 
         this.#bits = new Array(this.#intWidth * height);
-        this.#bits.fill(0);
+        this.#bits.fill(0 << 0);
     }
 
     #holderIndex(x, y) {
