@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Рисование и заливка — демо (floodfill.js / CanvasFloodFiller)</title>
+    <script src="../floodfill.js"></script>
+    <style>
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+        }
+
+        /*
+         * Демо — колонка на всю высоту окна: холст занимает всё свободное место,
+         * а под ним — кнопки и палитра. Всё вмещается в экран без прокрутки.
+         */
+        #ff-demo {
+            --ff-accent: #2563eb;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            max-width: 100%;
+            box-sizing: border-box;
+            height: 100vh;
+            height: 100dvh; /* на мобильных адресная панель динамическая; без поддержки dvh останется 100vh */
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+            overflow: hidden;
+        }
+        #ff-demo *,
+        #ff-demo *::before,
+        #ff-demo *::after {
+            box-sizing: border-box;
+        }
+
+        /* Холст: растягивается на всё свободное место между подсказкой и кнопками.
+           flex: 1 1 auto + min-height: 0 позволяют ему сжиматься, чтобы не выталкивать
+           кнопки и палитру за нижний край окна. Размеры холста в пикселях задаёт скрипт. */
+        #ff-canvas-wrap {
+            position: relative;
+            width: 100%;
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: hidden;
+            border: 1px solid #c9c9c9;
+            border-radius: 6px;
+            background-color: #ffffff;
+            /* Светлая "клеточка", чтобы прозрачный холст был виден до первого штриха */
+            background-image:
+                    linear-gradient(45deg, #ececec 25%, transparent 25%, transparent 75%, #ececec 75%),
+                    linear-gradient(45deg, #ececec 25%, transparent 25%, transparent 75%, #ececec 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+        }
+
+        #ff-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 10px 0 12px;
+            flex: none;
+        }
+        #ff-demo .ff-btn {
+            font: inherit;
+            font-size: 15px;
+            line-height: 1.2;
+            padding: 8px 16px;
+            border: 1px solid #c9c9c9;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #1a1a1a;
+            cursor: pointer;
+            -webkit-appearance: none;
+            appearance: none;
+            transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+        }
+        #ff-demo .ff-btn:hover {
+            border-color: var(--ff-accent);
+        }
+        #ff-demo .ff-btn-active {
+            background: var(--ff-accent);
+            border-color: var(--ff-accent);
+            color: #ffffff;
+        }
+
+        #ff-palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            flex: none;
+        }
+        #ff-demo .ff-swatch {
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, .25);
+            transition: transform .1s ease, box-shadow .15s ease;
+        }
+        #ff-demo .ff-swatch:hover {
+            transform: scale(1.12);
+        }
+        #ff-demo .ff-swatch-active {
+            box-shadow: 0 0 0 2px var(--ff-accent);
+            transform: scale(1.12);
+        }
+    </style>
+</head>
+<body>
+
+<!-- ============ Демо-блок: можно вставлять в пост WordPress ============ -->
+<div id="ff-demo">
+    <div id="ff-canvas-wrap"></div>
+    <div id="ff-toolbar">
+        <button type="button" id="ff-tool-draw" class="ff-btn">Рисунок</button>
+        <button type="button" id="ff-tool-fill" class="ff-btn">Заливка</button>
+    </div>
+    <div id="ff-palette"></div>
+</div>
+<!-- ============ Конец демо-блока ============ -->
+
+<script>
+
+    /* TrainPainter.js — урезанная копия: только карандаш (PENCIL) и заливка (FILL) */
+
+    function TrainCanvas() {
+        // private:
+        var _mainImage = null;      // HTMLCanvas: главное изображение
+        var _editGlass = null;      // DOMElement: "стекло" для событий мыши/тача
+
+        var _last = {x: -1, y: -1};         // "Прошлые" координаты при рисовании
+        var _mouseDown = {x: -1, y: -1};    // Координаты нажатия кнопки
+        var _mousePressed = false;          // Кнопка/палец нажаты?
+
+        // 2D-контекст основной канвы
+        var _canvasContext = null;
+
+        // Цвета: передний план (карандаш) и задний (заливка)
+        var _foreground = {r: 0, g: 0, b: 0, a: 255};
+        var _background = {r: 0, g: 0, b: 0, a: 255};
+
+        // Пустышка для неиспользуемых слотов таблиц инструментов (слот 0 = NONE)
+        var noop = function () { };
+
+        // public:
+        this.tools = {
+            NONE: 0,
+            PENCIL: 2,      // Карандаш
+            FILL: 11        // Заливка
+        };
+
+        var _currentTool = this.tools.NONE;
+
+        // Включение инструмента (правит курсор над "стеклом")
+        var _toolSwitchedOn = {
+            0: noop,
+            2: function () { _editGlass.style.cursor = "crosshair"; },
+            11: function () { _editGlass.style.cursor = "default"; }
+        };
+
+        // Выключение инструмента (карандашу и заливке нечего чинить)
+        var _toolSwitchedOff = {
+            0: noop,
+            2: noop,
+            11: noop
+        };
+
+        // Действие по нажатию кнопки/пальца
+        var _toolMouseDown = {
+            0: noop,
+            2: function (evt) {
+                // Карандаш: сразу рисуем точку
+                _canvasContext.beginPath();
+                _canvasContext.moveTo(evt.localX, evt.localY);
+                _canvasContext.lineTo(evt.localX, evt.localY);
+                _canvasContext.stroke();
+            },
+            11: function (evt) {
+                // Заливка: срабатывает по клику
+                var cff = new CanvasFloodFiller();
+                cff.floodFill(_canvasContext, evt.localX, evt.localY, _background);
+            }
+        };
+
+        // Действие по отпусканию кнопки/пальца
+        var _toolMouseUp = {
+            0: noop,
+            2: function () {
+                // Карандаш: завершаем штрих
+                _canvasContext.stroke();
+            },
+            11: noop
+        };
+
+        // Действие при движении мыши/пальца
+        var _toolMouseMove = {
+            0: noop,
+            2: function (evt) {
+                // Карандаш: ведём линию за курсором
+                if (_mousePressed) {
+                    _canvasContext.beginPath();
+                    _canvasContext.moveTo(_last.x, _last.y);
+                    _canvasContext.lineTo(evt.localX, evt.localY);
+                    _canvasContext.stroke();
+                }
+            },
+            11: noop
+        };
+
+        /*
+         * bool create(DOMElement pElement, int w, int h)
+         * Создаёт рисовалку внутри указанного DOM-элемента.
+         * */
+        this.create = function (pElement, w, h) {
+            // Канва и "стекло" событий. Overlay-канва не нужна: её использовали
+            // только инструменты с предпросмотром (линия, фигуры), которых здесь нет.
+            _mainImage = document.createElement("canvas");
+            _editGlass = document.createElement("div");
+
+            _mainImage.style.width = _editGlass.style.width = w + "px";
+            _mainImage.style.height = _editGlass.style.height = h + "px";
+
+            _mainImage.width = w;
+            _mainImage.height = h;
+
+            // Абсолютное позиционирование внутри контейнера
+            _mainImage.style.position = _editGlass.style.position = "absolute";
+
+            // Отключаем на "стекле" жесты браузера (прокрутку и масштабирование
+            // двойным тапом), чтобы касания целиком уходили в рисование
+            _editGlass.style.touchAction = 'none';
+
+            pElement.appendChild(_mainImage);
+            pElement.appendChild(_editGlass);
+
+            _canvasContext = _mainImage.getContext("2d");
+
+            _canvasContext.fillStyle = "rgba(0, 0, 255, 1.0)";
+            _canvasContext.strokeStyle = "rgba(255, 0, 0, 1.0)";
+            _canvasContext.lineWidth = 2;
+
+            /*
+             * void digestEvent(Event myEvent, bool doNotStop)
+             * Переводит координаты события в локальные координаты канвы.
+             * Округление до целых пикселей защищает заливку от бесконечного
+             * цикла при дробных координатах на тач-устройствах.
+             **/
+            var digestEvent = function (myEvent, doNotStop) {
+                if (doNotStop == null || doNotStop == false) {
+                    myEvent.preventDefault();
+                    myEvent.stopPropagation();
+                }
+
+                var px = 0;
+                var py = 0;
+
+                if (myEvent.changedTouches && myEvent.changedTouches.length > 0) {
+                    // На touchend массив touches уже пуст, поэтому первым берём changedTouches
+                    px = myEvent.changedTouches[0].pageX;
+                    py = myEvent.changedTouches[0].pageY;
+                } else if (myEvent.touches && myEvent.touches.length > 0) {
+                    px = myEvent.touches[0].pageX;
+                    py = myEvent.touches[0].pageY;
+                } else {
+                    px = myEvent.pageX;
+                    py = myEvent.pageY;
+                }
+
+                var canvX = _editGlass._calcX;
+                var canvY = _editGlass._calcY;
+
+                myEvent.localX = Math.floor(px - canvX);
+                myEvent.localY = Math.floor(py - canvY);
+            }
+
+            // Нажатие кнопки (или касание)
+            var mousedown = function (evt) {
+                digestEvent(evt);
+
+                if (_currentTool >= 0) {
+                    _toolMouseDown[_currentTool](evt);
+                }
+
+                _mouseDown.x = evt.localX;
+                _mouseDown.y = evt.localY;
+
+                // Начальная точка штриха: иначе карандаш на первом движении
+                // дотянул бы линию из конца предыдущего штриха
+                _last.x = evt.localX;
+                _last.y = evt.localY;
+
+                _mousePressed = true;
+            };
+
+            // Перемещение мыши
+            var mousemove = function (evt) {
+                // Полностью перевариваем событие, только пока рисуем;
+                // иначе оставляем странице прокрутку
+                digestEvent(evt, (_mousePressed == false));
+
+                if (_currentTool >= 0) {
+                    _toolMouseMove[_currentTool](evt);
+                }
+
+                _last.x = evt.localX;
+                _last.y = evt.localY;
+            };
+
+            // Отпускание кнопки
+            var mouseup = function (evt) {
+                // _mousePressed != false нужна потому, что mouseup ловим по документу
+                if (_currentTool >= 0 && _mousePressed != false) {
+                    digestEvent(evt);
+                    _toolMouseUp[_currentTool](evt);
+                }
+
+                _mouseDown.x = _mouseDown.y = -1;
+                _mousePressed = false;
+            }
+
+            // Касание экрана пальцем. Работает как mousedown.
+            var touchstart = function (evt) {
+                // Игнорируем мультитач: рисуем только первым пальцем
+                if (evt.touches.length > 1) {
+                    return;
+                }
+
+                digestEvent(evt);
+
+                if (_currentTool >= 0) {
+                    _toolMouseDown[_currentTool](evt);
+                }
+
+                _mouseDown.x = evt.localX;
+                _mouseDown.y = evt.localY;
+
+                _last.x = evt.localX;
+                _last.y = evt.localY;
+
+                _mousePressed = true;
+            };
+
+            // Движение пальца. Работает как mousemove.
+            var touchmove = function (evt) {
+                digestEvent(evt, (_mousePressed == false));
+
+                if (_currentTool >= 0) {
+                    _toolMouseMove[_currentTool](evt);
+                }
+
+                _last.x = evt.localX;
+                _last.y = evt.localY;
+            };
+
+            // Палец ушёл с экрана. Работает как mouseup.
+            var touchend = function (evt) {
+                if (_currentTool >= 0 && _mousePressed != false) {
+                    digestEvent(evt);
+                    _toolMouseUp[_currentTool](evt);
+                }
+
+                _mouseDown.x = _mouseDown.y = -1;
+                _mousePressed = false;
+            }
+
+            // Жест прерван системой — завершаем штрих как при обычном отрыве пальца
+            var touchcancel = touchend;
+
+            // Пересчёт позиции канвы на странице (для перевода координат событий)
+            var recalcPosition = function () {
+                _editGlass._calcX = _editGlass.offsetLeft;
+                _editGlass._calcY = _editGlass.offsetTop;
+
+                var obj = _editGlass.offsetParent;
+                while (obj != null) {
+                    _editGlass._calcX += obj.offsetLeft;
+                    _editGlass._calcY += obj.offsetTop;
+                    obj = obj.offsetParent;
+                }
+            }
+
+            recalcPosition();   // Изначальный вызов
+
+            // Современная событийная модель. Тач-события — непассивные, иначе
+            // preventDefault в digestEvent не сможет отменять прокрутку.
+            // Движение и отрыв продублированы на окно: рисование не обрывается,
+            // когда мышь/палец выходит за границы канвы.
+            _editGlass.addEventListener('mousedown', mousedown);
+            _editGlass.addEventListener('touchstart', touchstart, {passive: false});
+            window.addEventListener('mousemove', mousemove);
+            window.addEventListener('touchmove', touchmove, {passive: false});
+            window.addEventListener('mouseup', mouseup);
+            window.addEventListener('touchend', touchend);
+            window.addEventListener('touchcancel', touchcancel);
+            window.addEventListener('resize', recalcPosition);
+            window.addEventListener('scroll', recalcPosition);
+
+            return true;
+        }
+
+        /*
+         * void selectTool(int tool, Object parameters)
+         * Выбирает текущий инструмент (PENCIL или FILL).
+         * */
+        this.selectTool = function (tool, parameters) {
+            // Проверка диапазона
+            if (tool < 0 || tool > 11)
+                return;
+
+            // Инструмент на лету не меняется
+            _mousePressed = false;
+
+            if (_currentTool >= 0)
+                _toolSwitchedOff[_currentTool]();
+
+            _toolSwitchedOn[tool](parameters);
+
+            _currentTool = tool;
+        }
+
+        /*
+         * void setForegroundColor(int r, int g, int b, float a)
+         * Установить цвет карандаша (RGBA).
+         * */
+        this.setForegroundColor = function (r, g, b, a) {
+            _foreground.r = r;
+            _foreground.g = g;
+            _foreground.b = b;
+            _foreground.a = a;
+
+            _canvasContext.strokeStyle = "rgba(" + r + "," + g + "," + b + "," + a + ")";
+        }
+
+        /*
+         * void setBackgroundColor(int r, int g, int b, float a)
+         * Установить цвет заливки (RGBA).
+         * */
+        this.setBackgroundColor = function (r, g, b, a) {
+            _background.r = r;
+            _background.g = g;
+            _background.b = b;
+            _background.a = a;
+
+            _canvasContext.fillStyle = "rgba(" + r + "," + g + "," + b + "," + a + ")";
+        }
+    }
+
+
+    /* ============================================================
+     * Клей для демки: размеры, инструменты, палитра
+     * ============================================================ */
+    (function () {
+        'use strict';
+
+        var wrap = document.getElementById('ff-canvas-wrap');
+        if (!wrap) {
+            return;
+        }
+
+        var btnDraw = document.getElementById('ff-tool-draw');
+        var btnFill = document.getElementById('ff-tool-fill');
+        var paletteEl = document.getElementById('ff-palette');
+
+        // Текущее состояние демки
+        var currentTool = 2; // TrainCanvas.tools.PENCIL
+        var currentColor = {r: 0, g: 0, b: 0, a: 255};
+        var canv = null;
+        var currentW = 0;
+        var currentH = 0;
+
+        /* ---------- размеры и создание холста ---------- */
+
+        function canvasSize() {
+            var w = wrap.clientWidth;
+            var h = wrap.clientHeight;
+            if (w === 0) {
+                w = wrap.parentNode ? wrap.parentNode.clientWidth : 640;
+            }
+            if (h === 0) {
+                // Высота ещё не посчитана (например, при первой вставке в пост) —
+                // временно берём её из ширины
+                h = Math.round(w * 0.55);
+            }
+            if (w < 100) {
+                w = 100;
+            }
+            if (h < 80) {
+                h = 80;
+            }
+            return {w: w, h: h};
+        }
+
+        function createCanvas() {
+            wrap.innerHTML = '';
+            var size = canvasSize();
+            currentW = size.w;
+            currentH = size.h;
+            canv = new TrainCanvas();
+            canv.create(wrap, size.w, size.h);
+            wrap.style.height = size.h + 'px';
+            applyColor();
+            canv.selectTool(currentTool, null);
+        }
+
+        function applyColor() {
+            canv.setForegroundColor(currentColor.r, currentColor.g, currentColor.b, currentColor.a);
+            canv.setBackgroundColor(currentColor.r, currentColor.g, currentColor.b, currentColor.a);
+        }
+
+        /*
+         * Динамический ресайз: холст пересоздаётся под текущий размер
+         * контейнера (меняется вместе с окном). Чтобы не терять рисунок,
+         * перед пересозданием кадр сохраняется (toDataURL) и после —
+         * растягивается на новый холст.
+         */
+        var savedFrame = null;
+        var resizeTimer = null;
+
+        function onResize() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(function () {
+                var size = canvasSize();
+                // Размеры холста задаёт flex-раскладка, поэтому следим за обеими осями
+                if (Math.abs(size.w - currentW) < 2 && Math.abs(size.h - currentH) < 2) {
+                    return; // размеры не изменились — ничего не делаем
+                }
+                var main = wrap.children[0];
+                if (main && main.toDataURL) {
+                    try {
+                        savedFrame = main.toDataURL();
+                    } catch (e) {
+                        savedFrame = null;
+                    }
+                }
+                createCanvas();
+                if (savedFrame) {
+                    var img = new Image();
+                    img.onload = function () {
+                        var ctx = wrap.children[0].getContext('2d');
+                        var s2 = canvasSize();
+                        ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, s2.w, s2.h);
+                    };
+                    img.src = savedFrame;
+                }
+            }, 200);
+        }
+        window.addEventListener('resize', onResize);
+
+        // Дополнительно следим за шириной контейнера: тема WP может
+        // перестроить блок без изменения размера окна. Защита от цикла —
+        // в onResize: пересоздание меняет только высоту контейнера.
+        if (typeof ResizeObserver !== 'undefined') {
+            new ResizeObserver(function () {
+                onResize();
+            }).observe(wrap);
+        }
+
+        /* ---------- инструменты ---------- */
+
+        function activateTool(btn) {
+            var btns = document.querySelectorAll('#ff-demo .ff-btn');
+            for (var i = 0; i < btns.length; i++) {
+                btns[i].classList.remove('ff-btn-active');
+            }
+            btn.classList.add('ff-btn-active');
+        }
+
+        btnDraw.addEventListener('click', function () {
+            currentTool = canv.tools.PENCIL;
+            canv.selectTool(currentTool, null);
+            activateTool(btnDraw);
+        });
+
+        btnFill.addEventListener('click', function () {
+            currentTool = canv.tools.FILL;
+            canv.selectTool(currentTool, null);
+            activateTool(btnFill);
+        });
+
+        /* ---------- палитра ---------- */
+
+        var palette = [
+            ['#000000', 'Чёрный'],
+            ['#ffffff', 'Белый'],
+            ['#808080', 'Серый'],
+            ['#b71c1c', 'Красный'],
+            ['#ff7f00', 'Оранжевый'],
+            ['#fdd835', 'Жёлтый'],
+            ['#388e3c', 'Зелёный'],
+            ['#0097a7', 'Бирюзовый'],
+            ['#1565c0', 'Синий'],
+            ['#6a1b9a', 'Фиолетовый'],
+            ['#ec407a', 'Розовый'],
+            ['#795548', 'Коричневый']
+        ];
+
+        function hexToRgba(hex) {
+            var n = parseInt(hex.slice(1), 16);
+            return {r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a: 255};
+        }
+
+        palette.forEach(function (item) {
+            var swatch = document.createElement('span');
+            swatch.className = 'ff-swatch';
+            swatch.title = item[1];
+            swatch.style.background = item[0];
+
+            swatch.addEventListener('click', function () {
+                // Выбор цвета из палитры ставит оба цвета сразу —
+                // и "перо" (обводка), и заливку
+                currentColor = hexToRgba(item[0]);
+                applyColor();
+
+                var sw = paletteEl.getElementsByClassName('ff-swatch');
+                for (var i = 0; i < sw.length; i++) {
+                    sw[i].classList.remove('ff-swatch-active');
+                }
+                swatch.classList.add('ff-swatch-active');
+            });
+
+            paletteEl.appendChild(swatch);
+        });
+
+        /* ---------- старт ---------- */
+
+        createCanvas();
+        activateTool(btnDraw);
+        paletteEl.children[0].classList.add('ff-swatch-active');
+    })();
+</script>
+
+</body>
+</html>
