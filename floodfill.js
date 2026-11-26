@@ -75,13 +75,21 @@ class CanvasFloodFiller {
     // Посещённые пиксели на канве
     #visited = null;
 
+    #lastHalftoneRatio = 1;
+
     /**
      * @param {number} [tolerance=32] Необязательный допуск на цветовое
      *        расстояние при заливке. Это же значение доступно и как
      *        настраиваемое свойство: filler.tolerance.
+     * @param {boolean} [useHalftone=true] Если tolerance > 0, то применить
+     *        незначительное смешивание цветов пропорционально степени отличия
      */
-    constructor(tolerance = 32) {
+    constructor(tolerance = 32, useHalftone = true) {
+        if (tolerance < 0 || tolerance > 255)
+            throw new Error("tolerance should be in [0..255]");
+
         this.tolerance = tolerance;
+        this.useHalftone = useHalftone && tolerance > 0;
     }
 
     #dataOffsetByPixel(x, y) {
@@ -132,24 +140,55 @@ class CanvasFloodFiller {
         const da = this.#data[startOffset + 3];
 
         if (dr === this.#srcR && dg === this.#srcG && db === this.#srcB && da === this.#srcA) {
+            this.#lastHalftoneRatio = 1;
             return true;
         }
 
         if (this.tolerance > 0) {
             const distance = this.#computeDistance(dr, dg, db, da);
+            if (this.useHalftone && distance <= this.tolerance) {
+                this.#lastHalftoneRatio = (distance > 0 && this.useHalftone)?
+                    1 - distance / this.tolerance
+                :
+                    1;
+            }
+
             return distance <= this.tolerance;
         }
 
         return false;
     }
 
+    #halftone(actualColor, desiredColor) {
+        return Math.min(
+            Math.round(actualColor * (1 - this.#lastHalftoneRatio) + (desiredColor * this.#lastHalftoneRatio)),
+            255
+        );
+    }
+
     #replacePixel(x, y) {
         if (this.#visited.compareAndSetBit(x, y)) {
             const offset = this.#dataOffsetByPixel(x, y);
-            this.#data[offset] = this.#dstR;
-            this.#data[offset + 1] = this.#dstG;
-            this.#data[offset + 2] = this.#dstB;
-            this.#data[offset + 3] = this.#dstA;
+
+            if (this.useHalftone && this.#lastHalftoneRatio < 1) {
+                this.#data[offset] = this.#halftone(
+                    this.#data[offset], this.#dstR
+                );
+                this.#data[offset + 1] = this.#halftone(
+                    this.#data[offset + 1], this.#dstG
+                );
+                this.#data[offset + 2] = this.#halftone(
+                    this.#data[offset + 2], this.#dstB
+                );
+                this.#data[offset + 3] = this.#halftone(
+                    this.#data[offset + 3], this.#dstA
+                );
+            } else {
+                this.#data[offset] = this.#dstR;
+                this.#data[offset + 1] = this.#dstG;
+                this.#data[offset + 2] = this.#dstB;
+                this.#data[offset + 3] = this.#dstA;
+            }
         }
     }
 
@@ -261,8 +300,11 @@ class CanvasFloodFiller {
      * canvasContext - контекст
      * int x, y - координаты точки заливки
      * color - цвет заливки
+     * useHalftone - применить незначительное смешивание цветов
      */
-    floodFill(canvasContext, x, y, color) {
+    floodFill(canvasContext, x, y, color, useHalftone = this.useHalftone) {
+        this.useHalftone = useHalftone && this.tolerance > 0;
+
         this.#canvasWidth = canvasContext.canvas.width;
         this.#canvasHeight = canvasContext.canvas.height;
 
@@ -318,8 +360,10 @@ if (typeof CanvasRenderingContext2D !== "undefined" && !CanvasRenderingContext2D
      * @param color {{r: number, g: number, b: number, a: number}} Цвет заливки
      * @param tolerance {number} [32] Необязательный допуск на цветовое
      *        расстояние, передаётся в CanvasFloodFiller.
+     * @param useHalftone {boolean} [true] Необязательный флаг смешивания
+     *        цветов, передаётся в CanvasFloodFiller.
      */
-    CanvasRenderingContext2D.prototype.floodFill = function (x, y, color, tolerance) {
-        new CanvasFloodFiller(tolerance).floodFill(this, x, y, color);
+    CanvasRenderingContext2D.prototype.floodFill = function (x, y, color, tolerance, useHalftone) {
+        new CanvasFloodFiller(tolerance, useHalftone).floodFill(this, x, y, color);
     };
 }
